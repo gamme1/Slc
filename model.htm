@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Model Dashboard</title>
+    <style>
+        body { background: #0f172a; color: white; padding: 20px; font-family: Arial; }
+        .camera { background: #1e293b; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        video { width: 100%; max-width: 600px; border: 2px solid #333; }
+        button { background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .status { background: red; padding: 5px 15px; border-radius: 20px; display: inline-block; }
+        .live { background: #10b981; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }
+    </style>
+</head>
+<body>
+    <h1>Model Dashboard</h1>
+    
+    <div class="camera">
+        <video id="localVideo" autoplay muted></video>
+        <div id="status" class="status">● OFFLINE</div>
+        <button id="goLiveBtn" onclick="goLive()">🎬 GO LIVE</button>
+        <button onclick="window.location.href='index.html'">← Back</button>
+    </div>
+    
+    <div id="incomingCall" style="display:none; background:#1e293b; padding:20px; border-radius:10px;">
+        <h2>📞 Incoming Call!</h2>
+        <p id="callerInfo"></p>
+        <button onclick="acceptCall()">Accept ($<span id="callPrice">20</span>/min)</button>
+        <button onclick="declineCall()">Decline</button>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    
+    <script>
+        let socket, peer, localStream, currentCall, price = 20;
+        
+        async function init() {
+            // Connect to server
+            socket = io();
+            
+            // Get camera
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+            
+            // Setup PeerJS
+            peer = new Peer(`model_${Date.now()}`, { host: '0.peerjs.com', port: 443, secure: true });
+            
+            // Listen for incoming calls
+            socket.on('incoming-call', (data) => {
+                document.getElementById('incomingCall').style.display = 'block';
+                document.getElementById('callerInfo').textContent = `${data.callerName} is calling...`;
+                document.getElementById('callPrice').textContent = data.price;
+            });
+            
+            // Handle WebRTC calls
+            peer.on('call', (call) => {
+                currentCall = call;
+                call.answer(localStream);
+                
+                call.on('stream', (remoteStream) => {
+                    // Call is active
+                });
+                
+                call.on('close', () => {
+                    // Call ended
+                });
+            });
+        }
+        
+        function goLive() {
+            // Notify server we're online
+            socket.emit('model-online', {
+                modelId: 'model_' + Date.now(),
+                peerId: peer.id,
+                name: 'Model',
+                price: price
+            });
+            
+            document.getElementById('status').className = 'status live';
+            document.getElementById('status').textContent = '● LIVE';
+            document.getElementById('goLiveBtn').disabled = true;
+            alert('You are now LIVE! Users can call you.');
+        }
+        
+        function acceptCall() {
+            document.getElementById('incomingCall').style.display = 'none';
+            alert('Call accepted! Earning $' + price + '/min');
+        }
+        
+        function declineCall() {
+            document.getElementById('incomingCall').style.display = 'none';
+        }
+        
+        window.onload = init;
+    </script>
+</body>
+</html>
