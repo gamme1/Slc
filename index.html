@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Call Models</title>
+    <style>
+        body { background: #0f172a; color: white; padding: 20px; font-family: Arial; }
+        .model { background: #1e293b; padding: 15px; margin: 10px; border-radius: 10px; }
+        button { background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+        video { width: 100%; max-width: 500px; border: 2px solid #333; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Find Models</h1>
+    <div id="models"></div>
+    
+    <!-- Call Modal -->
+    <div id="callModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:1000;">
+        <video id="remoteVideo" autoplay></video>
+        <video id="localVideo" autoplay muted style="position:absolute; bottom:20px; right:20px; width:150px;"></video>
+        <button onclick="endCall()" style="position:absolute; bottom:20px; left:20px; background:red;">End Call</button>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    
+    <script>
+        let socket, peer, localStream, currentCall;
+        
+        // Initialize
+        async function init() {
+            // Connect to server
+            socket = io();
+            
+            // Get camera access
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+            
+            // Setup PeerJS
+            peer = new Peer(`user_${Date.now()}`, { host: '0.peerjs.com', port: 443, secure: true });
+            
+            // Display demo models
+            showModels();
+        }
+        
+        function showModels() {
+            const models = [
+                { id: 1, name: "Sofia", price: 20, online: true },
+                { id: 2, name: "Luna", price: 15, online: true },
+                { id: 3, name: "Emma", price: 25, online: false }
+            ];
+            
+            document.getElementById('models').innerHTML = models.map(m => `
+                <div class="model">
+                    <h3>${m.name} - $${m.price}/min</h3>
+                    <p>${m.online ? '● Online' : 'Offline'}</p>
+                    <button ${!m.online ? 'disabled' : ''} onclick="callModel(${m.id}, '${m.name}', ${m.price})">
+                        Call Now
+                    </button>
+                </div>
+            `).join('');
+        }
+        
+        async function callModel(modelId, modelName, price) {
+            // Ask server to connect us
+            socket.emit('call-model', { modelId, callerId: peer.id, callerName: 'User' }, async (response) => {
+                if (response.success) {
+                    // Start WebRTC call
+                    currentCall = peer.call(response.modelPeerId, localStream);
+                    
+                    currentCall.on('stream', (remoteStream) => {
+                        document.getElementById('callModal').style.display = 'block';
+                        document.getElementById('remoteVideo').srcObject = remoteStream;
+                    });
+                    
+                    currentCall.on('close', () => {
+                        endCall();
+                    });
+                } else {
+                    alert('Model is offline');
+                }
+            });
+        }
+        
+        function endCall() {
+            if (currentCall) currentCall.close();
+            document.getElementById('callModal').style.display = 'none';
+        }
+        
+        window.onload = init;
+    </script>
+</body>
+</html>
